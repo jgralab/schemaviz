@@ -13,21 +13,22 @@
 
 ;;## Attributes
 
-(defn emit-attribute [a]
+(defn emit-attribute [sep a]
   (let [d (adj a :domain)]
     (str (value a :name) ": " (value d :qualifiedName)
          (when-let [dv (value a :defaultValue)]
            (str " := " dv))
-         "\\l")))
+         sep)))
 
 ;;## VertexClasses
 
 (defn emit-vertex-class [vc]
   (let [id (make-id vc)]
-    (str "  " id " [shape=record, label=\"{{"
+    (str "  " id " [fillcolor=lightblue, style=filled, shape=record, label=\"{{"
          (value vc :qualifiedName) "}"
          (when (seq (iseq vc 'HasAttribute))
-           (apply str "|" (map emit-attribute (adjs vc :attribute))))
+           (apply str "|" (map (partial emit-attribute "\\l")
+                               (adjs vc :attribute))))
          "}\""
          "];\n")))
 
@@ -36,19 +37,41 @@
 
 ;;## EdgeClasses
 
-;; TODO: nen rautensymbol für ECs, so dass die auch generalisierungen können!
-;; also pro EC 2 kanten und nen raute-knoten in der mitte, der auch die ID der
-;; EC trägt.
+(defn emit-inc-class [where ic]
+  (str where "label=\""
+       (when-let [role (value ic :roleName)]
+         (str role "\\n"))
+       (let [min (Integer/valueOf (value ic :min))
+             max (Integer/valueOf (value ic :max))]
+         (cond
+          (== min max) min
+          (and (zero? min) (== Integer/MAX_VALUE max)) "*"
+          :else (str "(" min "," (if (== Integer/MAX_VALUE max)
+                                   "*"
+                                   max)
+                     ")")))
+       "\""))
+
+(defn emit-edge-class-1 [id ec]
+  (str "  " id " [fillcolor=khaki, style=\"rounded, filled\", shape=diamond, label=\""
+       (value ec :qualifiedName)
+       (when (seq (iseq ec 'HasAttribute))
+         (apply str "\\n" (map (partial emit-attribute "\\c")
+                               (adjs ec :attribute))))
+       "\""
+       "];\n"))
+
 (defn emit-edge-class [ec]
   (let [id (make-id ec)
-        src (make-id (adj ec :from :targetclass))
-        dst (make-id (adj ec :to :targetclass))]
-    (str "  " src " -> " dst " ["
-         "label=\"" (value ec :qualifiedName)
-         (when (seq (iseq ec 'HasAttribute))
-           (apply str "\\n" (map emit-attribute (adjs ec :attribute))))
-         "\""
-         "];\n")))
+        fic (adj ec :from)
+        tic (adj ec :to)
+        fvc (make-id (adj fic :targetclass))
+        tvc (make-id (adj tic :targetclass))]
+    (str (emit-edge-class-1 id ec)
+         "  " fvc " -> " id  "[arrowhead=\"none\", "
+         (emit-inc-class "tail" fic)
+         "];\n"
+         "  " id  " -> " tvc "[" (emit-inc-class "head" tic)  "];\n")))
 
 (defn emit-edge-classes [sg]
   (apply str (map emit-edge-class (vseq sg 'EdgeClass))))
