@@ -53,10 +53,10 @@
        "\""))
 
 (defn emit-edge-class-1 [id ec]
-  (str "  " id " [fillcolor=khaki, style=\"rounded, filled\", shape=diamond, label=\""
+  (str "  " id " [fillcolor=khaki, style=filled, shape=oval, label=\""
        (value ec :qualifiedName)
        (when (seq (iseq ec 'HasAttribute))
-         (apply str "\\n" (map (partial emit-attribute "\\c")
+         (apply str "\\n" (map (partial emit-attribute "\\n")
                                (adjs ec :attribute))))
        "\""
        "];\n"))
@@ -65,16 +65,32 @@
   (let [id (make-id ec)
         fic (adj ec :from)
         tic (adj ec :to)
+        tak (value tic :aggregation)
         fvc (make-id (adj fic :targetclass))
         tvc (make-id (adj tic :targetclass))]
     (str (emit-edge-class-1 id ec)
-         "  " fvc " -> " id  "[arrowhead=\"none\", "
+         "  " fvc " -> " id  "[dir=both, arrowhead=none, arrowtail="
+         (cond
+          (= tak (enum-constant ec 'structure.AggregationKind.COMPOSITE)) "diamond"
+          (= tak (enum-constant ec 'structure.AggregationKind.SHARED))    "ediamond"
+          :else "none") ", "
          (emit-inc-class "tail" fic)
          "];\n"
          "  " id  " -> " tvc "[" (emit-inc-class "head" tic)  "];\n")))
 
 (defn emit-edge-classes [sg]
   (apply str (map emit-edge-class (vseq sg 'EdgeClass))))
+
+;;## Specializations
+
+(defn emit-specialization [s]
+  (let [f (make-id (alpha s))
+        t (make-id (omega s))]
+    (str "  " f " -> " t " [color=gray, arrowhead=empty];\n")))
+
+(defn emit-specializations [sg]
+  (apply str (map emit-specialization
+                  (eseq sg '[SpecializesVertexClass SpecializesEdgeClass]))))
 
 ;;## Main
 
@@ -86,14 +102,16 @@
              s)
         vcs (emit-vertex-classes sg)
         ecs (emit-edge-classes sg)
-        generalizations nil]
+        specializations (emit-specializations sg)]
     (spit f
           (str "digraph Extracted {\n"
                "  rankdir=BT;\n"
-               "  ranksep=1.0;\n"
+               "  ranksep=3.0;\n"
+               "  node [fontname=\"Helvetica\"];"
+               "  edge [fontname=\"Helvetica\"];"
                vcs
                ecs
-               generalizations
+               specializations
                "}\n"))))
 
 #_(visualize-schema
