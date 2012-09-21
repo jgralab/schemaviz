@@ -11,6 +11,14 @@
 (def make-id
   (memoize (fn [v] (gensym "v"))))
 
+(def ^:dynamic *options*
+  {:rankdir "BT"
+   :ranksep "3.0"
+   :fontname "Helvetica"
+   :vertexclass-fill-color "lightblue"
+   :edgeclass-fill-color "khaki"
+   :specialization-color "gray"})
+
 ;;## Attributes
 
 (defn emit-attribute [sep a]
@@ -24,7 +32,8 @@
 
 (defn emit-vertex-class [vc]
   (let [id (make-id vc)]
-    (str "  " id " [fillcolor=lightblue, style=filled, shape=record, label=\"{{"
+    (str "  " id " [fillcolor=" (:vertexclass-fill-color *options*)
+         ", style=filled, shape=record, label=\"{{"
          (value vc :qualifiedName) "}"
          (when (seq (iseq vc 'HasAttribute))
            (apply str "|" (map (partial emit-attribute "\\l")
@@ -41,6 +50,11 @@
   (str where "label=\""
        (when-let [role (value ic :roleName)]
          (str role "\\n"))
+       (when-let [redefs (seq (iseq ic 'Redefines :out))]
+         (str "{redefines " (str/join ", "
+                                      (map #(value (omega %) :roleName)
+                                           redefs))
+              "}\\n"))
        (let [min (Integer/valueOf (value ic :min))
              max (Integer/valueOf (value ic :max))]
          (cond
@@ -53,7 +67,8 @@
        "\""))
 
 (defn emit-edge-class-1 [id ec]
-  (str "  " id " [fillcolor=khaki, style=filled, shape=oval, label=\""
+  (str "  " id " [fillcolor=" (:edgeclass-fill-color *options*)
+       ", style=filled, shape=oval, label=\""
        (value ec :qualifiedName)
        (when (seq (iseq ec 'HasAttribute))
          (apply str "\\n" (map (partial emit-attribute "\\n")
@@ -86,7 +101,8 @@
 (defn emit-specialization [s]
   (let [f (make-id (alpha s))
         t (make-id (omega s))]
-    (str "  " f " -> " t " [color=gray, arrowhead=empty];\n")))
+    (str "  " f " -> " t " [color=" (:specialization-color *options*)
+         ", arrowhead=empty];\n")))
 
 (defn emit-specializations [sg]
   (apply str (map emit-specialization
@@ -96,23 +112,26 @@
 
 (defn visualize-schema
   "Prints a visualization of Schema or SchemaGraph s to the file f."
-  [s f]
-  (let [sg (if (instance? Schema s)
-             (schema-graph s)
-             s)
-        vcs (emit-vertex-classes sg)
-        ecs (emit-edge-classes sg)
-        specializations (emit-specializations sg)]
-    (spit f
-          (str "digraph Extracted {\n"
-               "  rankdir=BT;\n"
-               "  ranksep=3.0;\n"
-               "  node [fontname=\"Helvetica\"];"
-               "  edge [fontname=\"Helvetica\"];"
-               vcs
-               ecs
-               specializations
-               "}\n"))))
+  ([s f]
+     (visualize-schema s f *options*))
+  ([s f opts]
+     (binding [*options* (merge *options* opts)]
+       (let [sg (if (instance? Schema s)
+                  (schema-graph s)
+                  s)
+             vcs (emit-vertex-classes sg)
+             ecs (emit-edge-classes sg)
+             specializations (emit-specializations sg)]
+         (spit f
+               (str "digraph Extracted {\n"
+                    "  rankdir=" (:rankdir *options*) ";\n"
+                    "  ranksep=" (:ranksep *options*) ";\n"
+                    "  node [fontname=" (:fontname *options*) "];"
+                    "  edge [fontname=" (:fontname *options*) "];"
+                    vcs
+                    ecs
+                    specializations
+                    "}\n"))))))
 
 #_(visualize-schema
  (load-schema "/home/horn/Repos/uni/jgralab/src/de/uni_koblenz/jgralab/schema/GrumlSchema.tg")
