@@ -3,7 +3,8 @@
         funnyqt.query
         funnyqt.query.tg
         funnyqt.protocols)
-  (:require [clojure.string :as str])
+  (:require clojure.java.shell
+            [clojure.string :as str])
   (:import
    (de.uni_koblenz.jgralab.schema Schema)))
 
@@ -15,34 +16,24 @@
 (def ^:dynamic *options*
   "Default options to use.  May be overridden to customize the layout by
   providing an own options map to `visualize-schema` whose entries are merged
-  with the default opts.
+  with the default opts."
+  {:rankdir ["BT" "See http://www.graphviz.org/content/attrs#drankdir"]
+   :ranksep ["3.0" "See http://www.graphviz.org/content/attrs#dranksep"]
+   :fontname ["Helvetica" "See http://www.graphviz.org/content/attrs#dfontname"]
+   :graphclass-fill-color ["green" "The fill color of the graphclass node"]
+   :vertexclass-fill-color ["lightblue" "The fill color of vertexclass nodes"]
+   :edgeclass-fill-color ["khaki" "The fill color of edgeclass nodes"]
+   :edgeclass-weight [1 "The weight of edgeclass edges.  If it is
+  higher than :specialization-weight, then edgeclass edges are tried to be
+  shorter and more straight than specialization edges."]
+   :specialization-color ["gray" "The color of specialization edges"]
+   :specialization-weight [2 "The weight of specialization
+  edges. See :edgeclass-weight."]
+   :enumdomain-fill-color ["goldenrod" "The fill color of enumdomain nodes"]
+   :recorddomain-fill-color ["lightsalmon" "The fill color of recorddomain nodes"]})
 
-  The meaning of the options are as follows:
-
-    :rankdir                 See http://www.graphviz.org/content/attrs#drankdir
-    :ranksep                 See http://www.graphviz.org/content/attrs#dranksep
-    :fontname                See http://www.graphviz.org/content/attrs#dfontname
-    :graphclass-fill-color   The fill color of the graphclass node
-    :edgeclass-fill-color    The fill color of edgeclass nodes
-    :edgeclass-weight        The weight of edgeclass edges.  If it is higher
-                             than :specialization-weight, then edgeclass edges
-                             are tried to be shorter and more straight than
-                             specialization edges.
-    :specialization-color    The color of specialization edges
-    :specialization-weight   See :edgeclass-weight
-    :enumdomain-fill-color   The fill color of enumdomain nodes
-    :recorddomain-fill-color The fill color of recorddomains"
-  {:rankdir "BT"
-   :ranksep "3.0"
-   :fontname "Helvetica"
-   :graphclass-fill-color "green"
-   :vertexclass-fill-color "lightblue"
-   :edgeclass-fill-color "khaki"
-   :edgeclass-weight 1
-   :specialization-color "gray"
-   :specialization-weight 2
-   :enumdomain-fill-color "goldenrod"
-   :recorddomain-fill-color "lightsalmon"})
+(defn get-opt [opt]
+  (first (opt *options*)))
 
 ;;## Attributes
 
@@ -57,7 +48,7 @@
 
 (defn emit-vertex-class [vc]
   (let [id (make-id vc)]
-    (str "  " id " [fillcolor=" (:vertexclass-fill-color *options*)
+    (str "  " id " [fillcolor=" (get-opt :vertexclass-fill-color)
          ", style=filled, shape=record, label=\"{{"
          (value vc :qualifiedName) "}"
          (when (seq (iseq vc 'HasAttribute))
@@ -72,6 +63,7 @@
 ;;## EdgeClasses
 
 (defn emit-inc-class [ic]
+  (println "ic =" ic)
   (str "label=\""
        (let [min (Integer/valueOf (value ic :min))
              max (Integer/valueOf (value ic :max))]
@@ -86,13 +78,13 @@
          (str "\\l" role))
        (when-let [redefs (seq (iseq ic 'Redefines :out))]
          (str "\\l{redefines " (str/join ", "
-                                      (map #(value (omega %) :roleName)
-                                           redefs))
+                                         (map #(value (omega %) :roleName)
+                                              redefs))
               "}\\n"))
        "\""))
 
 (defn emit-edge-class-1 [id ec]
-  (str "  " id " [fillcolor=" (:edgeclass-fill-color *options*)
+  (str "  " id " [fillcolor=" (get-opt :edgeclass-fill-color)
        ", style=filled, shape=oval, label=\""
        (value ec :qualifiedName)
        (when (seq (iseq ec 'HasAttribute))
@@ -110,7 +102,7 @@
         tvc (make-id (adj tic :targetclass))]
     (str (emit-edge-class-1 id ec)
          "  " fvc " -> " id  " [dir=both, arrowhead=none, "
-         "weight=" (:edgeclass-weight *options*)
+         "weight=" (get-opt :edgeclass-weight)
          ", arrowtail="
          (cond
           (= tak (enum-constant ec 'structure.AggregationKind.COMPOSITE)) "diamond"
@@ -119,7 +111,7 @@
          (emit-inc-class fic)
          "];\n"
          "  " id  " -> " tvc " ["
-         "weight=" (:edgeclass-weight *options*) ", "
+         "weight=" (get-opt :edgeclass-weight) ", "
          (emit-inc-class tic)  "];\n")))
 
 (defn emit-edge-classes [sg]
@@ -130,8 +122,8 @@
 (defn emit-specialization [s]
   (let [f (make-id (alpha s))
         t (make-id (omega s))]
-    (str "  " f " -> " t " [color=" (:specialization-color *options*)
-         ", weight=" (:specialization-weight *options*)
+    (str "  " f " -> " t " [color=" (get-opt :specialization-color)
+         ", weight=" (get-opt :specialization-weight)
          ", arrowhead=empty];\n")))
 
 (defn emit-specializations [sg]
@@ -141,7 +133,7 @@
 ;;## Custom domains
 
 (defn emit-enum-domain [d]
-  (str "    " (make-id d) " [fillcolor=" (:enumdomain-fill-color *options*)
+  (str "    " (make-id d) " [fillcolor=" (get-opt :enumdomain-fill-color)
          ", style=filled, shape=record, label=\"{{«enum»\\n"
          (value d :qualifiedName) "}"
          " | " (str/join "\\n" (value d :enumConstants))
@@ -149,7 +141,7 @@
          "];\n"))
 
 (defn emit-record-domain [d]
-  (str "    " (make-id d) " [fillcolor=" (:recorddomain-fill-color *options*)
+  (str "    " (make-id d) " [fillcolor=" (get-opt :recorddomain-fill-color)
        ", style=filled, shape=record, label=\"{{«record»\\n"
        (value d :qualifiedName) "}"
        " | " (str/join "\\n" (map #(str (value % :name) ": "
@@ -170,7 +162,7 @@
 
 (defn emit-graph-class [sg]
   (let [gc (the (vseq sg 'GraphClass))]
-    (str "  " (make-id gc) " [fillcolor=" (:graphclass-fill-color *options*)
+    (str "  " (make-id gc) " [fillcolor=" (get-opt :graphclass-fill-color)
          ", style=filled, shape=record, label=\"{{«graphclass»\\n"
          (value gc :qualifiedName) "}"
          (when (seq (iseq gc 'HasAttribute))
@@ -195,25 +187,30 @@
              vcs (emit-vertex-classes sg)
              ecs (emit-edge-classes sg)
              specializations (emit-specializations sg)
-             doms (emit-custom-domains-cluster sg)]
-         (spit f
-               (str "digraph Extracted {\n"
-                    "  rankdir=" (:rankdir *options*) ";\n"
-                    "  ranksep=" (:ranksep *options*) ";\n"
-                    "  node [fontname=" (:fontname *options*) "];\n"
-                    "  edge [fontname=" (:fontname *options*) "];\n"
-                    gc
-                    vcs
-                    ecs
-                    specializations
-                    "  subgraph clusterCustomDomains {\n"
-                    doms
-                    "}\n"
-                    "}\n"))))))
+             doms (emit-custom-domains-cluster sg)
+             ds (str "digraph Extracted {\n"
+                     "  rankdir=" (get-opt :rankdir) ";\n"
+                     "  ranksep=" (get-opt :ranksep) ";\n"
+                     "  node [fontname=" (get-opt :fontname) "];\n"
+                     "  edge [fontname=" (get-opt :fontname) "];\n"
+                     gc
+                     vcs
+                     ecs
+                     specializations
+                     "  subgraph clusterCustomDomains {\n"
+                     doms
+                     "}\n"
+                     "}\n")
+             suffix (second (re-matches #".*\.([^.]+)$" f))
+             lang (get #{"dot" "xdot" "ps" "svg" "svgz" "png" "gif" "pdf" "eps" "gtk"}
+                       suffix "pdf")
+             r (clojure.java.shell/sh "dot" (str "-T" lang) "-o" f :in ds)]
+         (when-not (zero? (:exit r))
+           (throw (RuntimeException. (format "Dotting failed: %s" (:err r)))))))))
 
 #_(visualize-schema
  (load-schema "/home/horn/Repos/uni/jgralab/src/de/uni_koblenz/jgralab/schema/GrumlSchema.tg")
- "/home/horn/test.dot")
+ "/home/horn/test.gtk")
 
 #_(visualize-schema
  (load-schema "/home/horn/Repos/uni/grabaja/java5.tg")
