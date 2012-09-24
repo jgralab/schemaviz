@@ -63,7 +63,6 @@
 ;;## EdgeClasses
 
 (defn emit-inc-class [ic]
-  (println "ic =" ic)
   (str "label=\""
        (let [min (Integer/valueOf (value ic :min))
              max (Integer/valueOf (value ic :max))]
